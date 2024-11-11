@@ -85,7 +85,12 @@ impl SocketSend for RouterSocket {
         let peer_id: PeerIdentity = message.pop_front().unwrap().try_into()?;
         match self.backend.peers.get_mut(&peer_id) {
             Some(mut peer) => {
-                peer.send_queue.send(Message::Message(message)).await?;
+                let res = peer.send_queue.send(Message::Message(message)).await;
+                if res.is_err() {
+                    self.backend.peer_disconnected(&peer_id);
+                }
+
+                res?;
                 Ok(())
             }
             None => Err(ZmqError::Other("Destination client not found by identity")),
