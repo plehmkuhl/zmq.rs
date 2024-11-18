@@ -87,7 +87,10 @@ impl SocketSend for RouterSocket {
             Some(mut peer) => {
                 let res = peer.send_queue.send(Message::Message(message)).await;
                 if res.is_err() {
-                    self.backend.peer_disconnected(&peer_id);
+                    let backend = self.backend.clone();
+                    tokio::spawn(async move {
+                        backend.peer_disconnected(&peer_id);
+                    });
                 }
 
                 res?;
