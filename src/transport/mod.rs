@@ -54,7 +54,7 @@ pub struct AcceptStopHandle(pub(crate) TaskHandle<()>);
 /// `Ok`, it will receive a tuple containing the framed raw socket, along with
 /// the endpoint of the remote connection accepted.
 ///
-/// Returns a ZmqResult, which when Ok is a tuple of the resolved bound
+/// Returns a `ZmqResult`, which when Ok is a tuple of the resolved bound
 /// endpoint, as well as a channel to stop the async accept task
 ///
 /// # Panics
@@ -104,9 +104,9 @@ where
 #[cfg(any(feature = "async-std-runtime", feature = "async-dispatcher-runtime"))]
 fn make_framed<T>(stream: T) -> FramedIo
 where
-    T: futures_io::AsyncRead + futures_io::AsyncWrite + Send + Sync + 'static,
+    T: futures::AsyncRead + futures::AsyncWrite + Send + Sync + 'static,
 {
-    use futures_util::AsyncReadExt;
+    use futures::AsyncReadExt;
     let (read, write) = stream.split();
     FramedIo::new(Box::new(read), Box::new(write))
 }

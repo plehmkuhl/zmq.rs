@@ -43,8 +43,8 @@ use util::PeerIdentity;
 
 use async_trait::async_trait;
 use asynchronous_codec::FramedWrite;
-use futures_channel::mpsc;
-use futures_util::{select, FutureExt};
+use futures::channel::mpsc;
+use futures::{select, FutureExt};
 use parking_lot::Mutex;
 
 use std::collections::HashMap;
@@ -185,8 +185,8 @@ impl SocketOptions {
 pub trait MultiPeerBackend: SocketBackend {
     /// This should not be public..
     /// Find a better way of doing this
-
     async fn peer_connected(self: Arc<Self>, peer_id: &PeerIdentity, io: FramedIo);
+
     fn peer_disconnected(&self, peer_id: &PeerIdentity);
 }
 
@@ -211,6 +211,7 @@ pub trait SocketSend {
 /// in [proxy] function as a capture parameter
 pub trait CaptureSocket: SocketSend {}
 
+#[allow(clippy::empty_line_after_outer_attr)]
 #[async_trait]
 pub trait Socket: Sized + Send {
     fn new() -> Self {
@@ -230,18 +231,16 @@ pub trait Socket: Sized + Send {
         let endpoint = TryIntoEndpoint::try_into(endpoint)?;
 
         let cloned_backend = self.backend();
-        let cback = move |result| {
+        let cback = move |result: ZmqResult<(FramedIo, Endpoint)>| {
             let cloned_backend = cloned_backend.clone();
             async move {
                 let result = match result {
-                    Ok((socket, endpoint)) => {
-                        match util::peer_connected(socket, cloned_backend.clone()).await {
-                            Ok(peer_id) => Ok((endpoint, peer_id)),
-                            Err(e) => Err(e),
-                        }
-                    }
+                    Ok((socket, endpoint)) => util::peer_connected(socket, cloned_backend.clone())
+                        .await
+                        .map(|peer_id| (endpoint, peer_id)),
                     Err(e) => Err(e),
                 };
+
                 match result {
                     Ok((endpoint, peer_id)) => {
                         if let Some(monitor) = cloned_backend.monitor().lock().as_mut() {
@@ -302,22 +301,13 @@ pub trait Socket: Sized + Send {
         let backend = self.backend();
         let endpoint = TryIntoEndpoint::try_into(endpoint)?;
 
-        let result = match util::connect_forever(endpoint).await {
-            Ok((socket, endpoint)) => match util::peer_connected(socket, backend).await {
-                Ok(peer_id) => Ok((endpoint, peer_id)),
-                Err(e) => Err(e),
-            },
-            Err(e) => Err(e),
-        };
-        match result {
-            Ok((endpoint, peer_id)) => {
-                if let Some(monitor) = self.backend().monitor().lock().as_mut() {
-                    let _ = monitor.try_send(SocketEvent::Connected(endpoint, peer_id));
-                }
-                Ok(())
-            }
-            Err(e) => Err(e),
+        let (socket, endpoint) = util::connect_forever(endpoint).await?;
+        let peer_id = util::peer_connected(socket, backend).await?;
+
+        if let Some(monitor) = self.backend().monitor().lock().as_mut() {
+            let _ = monitor.try_send(SocketEvent::Connected(endpoint, peer_id));
         }
+        Ok(())
     }
 
     /// Creates and setups new socket monitor
@@ -333,11 +323,11 @@ pub trait Socket: Sized + Send {
     /// # Errors
     /// May give a `ZmqError::NoSuchConnection` if `endpoint` isn't connected.
     /// May also give any other zmq errors encountered when attempting to
-    /// disconnect.
+    /// disconnect
     // TODO: async fn disconnect(&mut self, endpoint: impl TryIntoEndpoint + 'async_trait) ->
     // ZmqResult<()>;
 
-    /// Disconnects all connecttions, blocking until finished.
+    /// Disconnects all connections, blocking until finished.
     // TODO: async fn disconnect_all(&mut self) -> ZmqResult<()>;
 
     /// Closes the socket, blocking until all associated binds are closed.
